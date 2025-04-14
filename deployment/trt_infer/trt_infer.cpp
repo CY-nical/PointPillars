@@ -10,10 +10,13 @@
 #include "include/utils.h"
 #include "include/nms_trt.h"
 
+#include "include/json.hpp"
+#include <fstream>
+
 // Logger for TensorRT info/warning/errors
 class Logger : public nvinfer1::ILogger           
 {
-    void log(Severity severity, const char* msg) override
+    void log(Severity severity, const char* msg)noexcept override
     {
         switch(severity) {
             case Severity::kINTERNAL_ERROR:
@@ -284,7 +287,7 @@ void postProcessing(std::vector<float>& output, int& num_class, float& nms_thr, 
 }
 
 void runTime(std::vector<Point>& points, int& test_number, nvinfer1::ICudaEngine* engine, 
-             nvinfer1::IExecutionContext* context, const int NDim){
+             nvinfer1::IExecutionContext* context, const int NDim, nlohmann::json& outputjson){
     std::vector<float> voxel_size = {0.16, 0.16, 4};
     std::vector<float> coors_range = {0, -39.68, -3, 69.12, 39.68, 1};
     int max_points = 32;
@@ -347,6 +350,11 @@ void runTime(std::vector<Point>& points, int& test_number, nvinfer1::ICudaEngine
     std::cout << "Average inference time: " << avg_inference_time << " ms" << std::endl;
     std::cout << "Average post processing time: " << avg_post_processing_time << " ms" << std::endl;
     std::cout << "Average total time for loop: " << avg_total_time << " ms" << std::endl; 
+
+    outputjson["avg_total_time"] = avg_total_time;
+    outputjson["avg_pre_time"] = avg_voxelization_time;
+    outputjson["avg_model_time"] = avg_inference_time;
+    outputjson["avg_post_time"] = avg_post_processing_time;
 }
 
 int main(int argc, char *argv[]) {
@@ -357,7 +365,10 @@ int main(int argc, char *argv[]) {
 
     // 0. read data
     std::vector<Point> points_ori, points; 
-    std::string file_path = argv[1]; // "../../../dataset/demo_data/val/000134.bin"
+    std::string file_path = argv[1]; // "../../../dataset/demo_data/val/000134.bin";
+    int string_pos = file_path.size() - 10;
+    std::string file_index = file_path.substr(string_pos, 6);
+    std::cout<< "index : " << file_index << std::endl;
     bool read_data_ok = readPoints(file_path, points_ori);
     if (!read_data_ok) return 0;
     pointCloudFiler(points_ori, points);
@@ -402,13 +413,41 @@ int main(int argc, char *argv[]) {
     postProcessing(output, num_class, nms_thr, score_thr, max_num, bboxes);
 
     // 4. write results to file
-    writeFile(bboxes, "../../infer_results/trt.txt");
+    writeFile(bboxes, "../../infer_results/trtfp16.txt");
+    //exporting json obj
+    nlohmann::json output_json;
+    nlohmann::json array = nlohmann::json::array();
+    for (const auto& box : bboxes) {
+        array.push_back({
+            {"x", box.x},
+            {"y", box.y},
+            {"z", box.z},
+            {"w", box.w},
+            {"l", box.l},
+            {"h", box.h},
+            {"theta", box.theta},
+            {"score", box.score},
+            {"label", box.label}
+        });
+    }
+    output_json["bounding boxes"] = array;
+
 
     // 5. runtime 
     int test_number = 100;
-    runTime(points, test_number, engine, context, NDim);
+    runTime(points, test_number, engine, context, NDim, output_json);
 
     context->destroy();
     engine->destroy();
+
+    
+
+    std::string loc = "../../../json_output/"+file_index+"_trtfp16.json";
+    std::cout << loc << std::endl;
+    std::ofstream out(loc);
+    out << output_json.dump(4);
+    out.close();
+    //std::cout << output.dump(4)<< std::endl;
+
     return 0;
 }

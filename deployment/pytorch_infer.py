@@ -6,6 +6,7 @@ import sys
 import time
 import torch
 import pdb
+import json
 
 
 CUR = os.path.dirname(os.path.abspath(__file__))
@@ -69,10 +70,12 @@ def main(args):
     result_filter = keep_bbox_from_lidar_range(result_filter, pcd_limit_range)
     lidar_bboxes = result_filter['lidar_bboxes']
     labels, scores = result_filter['labels'], result_filter['scores']
-    vis_pc(pc, bboxes=lidar_bboxes, labels=labels)
+    #vis_pc(pc, bboxes=lidar_bboxes, labels=labels)
     result_array = np.concatenate([lidar_bboxes, scores[:, None], labels[:, None]], axis=-1)
     os.makedirs(os.path.dirname(args.saved_path), exist_ok=True)
     np.savetxt(args.saved_path, result_array, fmt='%.4f')
+
+    
 
     time_total, time_pre, time_model, time_post = 0.0, 0.0, 0.0, 0.0
     test_samples = 100
@@ -105,7 +108,20 @@ def main(args):
     avg_post_time = time_post * 1.0 / test_samples * 1000.0
     print('Pytorch total: {:.2f}ms, pre: {:.2f}ms, model: {:.2f}ms, post: {:.2f}ms'
           .format(avg_total_time, avg_pre_time, avg_model_time, avg_post_time))
-
+    data = {
+            'lidar_bboxes': lidar_bboxes.tolist(),
+            'scores': scores.tolist(),
+            'labels': labels.tolist(),
+            'avg_total_time': avg_total_time,
+            'avg_pre_time': avg_pre_time,
+            'avg_model_time': avg_model_time,
+            'avg_post_time': avg_post_time
+    }
+    index = args.pc_path[-10:-4]
+    json_loc = '../json_output_pytorch/'+str(index)+'.json'
+    print(json_loc)
+    with open(json_loc, 'w') as f:
+        json.dump(data,f,indent = 4)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Configuration Parameters')

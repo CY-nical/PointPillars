@@ -93,8 +93,9 @@ def main(args):
     result_filter = keep_bbox_from_lidar_range(result_filter, pcd_limit_range)
     lidar_bboxes = result_filter['lidar_bboxes']
     labels, scores = result_filter['labels'], result_filter['scores']
-    vis_pc(pc, bboxes=lidar_bboxes, labels=labels)
+    #vis_pc(pc, bboxes=lidar_bboxes, labels=labels)
     result_array = np.concatenate([lidar_bboxes, scores[:, None], labels[:, None]], axis=-1)
+    #print(lidar_bboxes)
     os.makedirs(os.path.dirname(args.saved_path), exist_ok=True)
     np.savetxt(args.saved_path, result_array, fmt='%.4f')
 

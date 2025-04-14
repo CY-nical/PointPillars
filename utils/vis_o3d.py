@@ -52,10 +52,12 @@ def vis_core(plys):
     vis.create_window()
 
     PAR = os.path.dirname(os.path.abspath(__file__))
-    ctr = vis.get_view_control()
     param = o3d.io.read_pinhole_camera_parameters(os.path.join(PAR, 'viewpoint.json'))
     for ply in plys:
         vis.add_geometry(ply)
+    vis.poll_events()
+    vis.update_renderer()
+    ctr = vis.get_view_control()
     ctr.convert_from_pinhole_camera_parameters(param)
 
     vis.run()
