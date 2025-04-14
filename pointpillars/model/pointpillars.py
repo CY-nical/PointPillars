@@ -55,7 +55,7 @@ class PillarEncoder(nn.Module):
         self.y_l = int((point_cloud_range[4] - point_cloud_range[1]) / voxel_size[1])
 
         self.conv = nn.Conv1d(in_channel, out_channel, 1, bias=False)
-        self.bn = nn.BatchNorm1d(out_channel, eps=1e-3, momentum=0.01)
+        self.bn = nn.BatchNorm1d(out_channel, eps=1e-3, momentum=0.01)                  #Normalizes output so that gradient descend is more efficient as weights can be drastically different from one another
 
     def forward(self, pillars, coors_batch, npoints_per_pillar):
         '''
@@ -65,7 +65,7 @@ class PillarEncoder(nn.Module):
         return:  (bs, out_channel, y_l, x_l)
         '''
         device = pillars.device
-        # 1. calculate offset to the points center (in each pillar)
+        # 1. calculate offset to the points center (in each pillar) i.e. mean location of all points in the pillar
         offset_pt_center = pillars[:, :, :3] - torch.sum(pillars[:, :, :3], dim=1, keepdim=True) / npoints_per_pillar[:, None, None] # (p1 + p2 + ... + pb, num_points, 3)
 
         # 2. calculate offset to the pillar center
@@ -84,12 +84,12 @@ class PillarEncoder(nn.Module):
         voxel_ids = torch.arange(0, pillars.size(1)).to(device) # (num_points, )
         mask = voxel_ids[:, None] < npoints_per_pillar[None, :] # (num_points, p1 + p2 + ... + pb)
         mask = mask.permute(1, 0).contiguous()  # (p1 + p2 + ... + pb, num_points)
-        features *= mask[:, :, None]
+        features *= mask[:, :, None] #sets the features of any extra padded points to zero
 
         # 5. embedding
-        features = features.permute(0, 2, 1).contiguous() # (p1 + p2 + ... + pb, 9, num_points)
-        features = F.relu(self.bn(self.conv(features)))  # (p1 + p2 + ... + pb, out_channels, num_points)
-        pooling_features = torch.max(features, dim=-1)[0] # (p1 + p2 + ... + pb, out_channels)
+        features = features.permute(0, 2, 1).contiguous() # (p1 + p2 + ... + pb, 9, num_points)             Swaps Dimensions for compatibility
+        features = F.relu(self.bn(self.conv(features)))  # (p1 + p2 + ... + pb, out_channels, num_points)   Convolution, batchnorm, then relu
+        pooling_features = torch.max(features, dim=-1)[0] # (p1 + p2 + ... + pb, out_channels)              Max pooling to compress features into a single vector
 
         # 6. pillar scatter
         batched_canvas = []

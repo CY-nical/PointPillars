@@ -33,16 +33,16 @@ def judge_difficulty(annotation_dict):
 
 
 def create_data_info_pkl(data_root, data_type, prefix, label=True, db=False):
-    sep = os.path.sep
-    print(f"Processing {data_type} data..")
-    ids_file = os.path.join(CUR, 'pointpillars', 'dataset', 'ImageSets', f'{data_type}.txt')
+    sep = os.path.sep                                                                           #returns seperater for filesystem = '\'
+    print(f"Processing {data_type} data..")                                                     #data type refers to 'train' 'test' 'val'
+    ids_file = os.path.join(CUR, 'pointpillars', 'dataset', 'ImageSets', f'{data_type}.txt')    #constructing a file path
     with open(ids_file, 'r') as f:
-        ids = [id.strip() for id in f.readlines()]
+        ids = [id.strip() for id in f.readlines()]                                              #Reads and store the IDs for the relevant dataset type and removes whitespaces and \n
     
     split = 'training' if label else 'testing'
 
     kitti_infos_dict = {}
-    if db:
+    if db:                                                                                      #creates ground truth database
         kitti_dbinfos_train = {}
         db_points_saved_path = os.path.join(data_root, f'{prefix}_gt_database')
         os.makedirs(db_points_saved_path, exist_ok=True)
@@ -50,8 +50,8 @@ def create_data_info_pkl(data_root, data_type, prefix, label=True, db=False):
         cur_info_dict={}
         img_path = os.path.join(data_root, split, 'image_2', f'{id}.png')
         lidar_path = os.path.join(data_root, split, 'velodyne', f'{id}.bin')
-        calib_path = os.path.join(data_root, split, 'calib', f'{id}.txt') 
-        cur_info_dict['velodyne_path'] = sep.join(lidar_path.split(sep)[-3:])
+        calib_path = os.path.join(data_root, split, 'calib', f'{id}.txt')                       #Constructing paths
+        cur_info_dict['velodyne_path'] = sep.join(lidar_path.split(sep)[-3:])                   #extract last 3 parts of abs path, getting relative path
 
         img = cv2.imread(img_path)
         image_shape = img.shape[:2]
@@ -59,13 +59,13 @@ def create_data_info_pkl(data_root, data_type, prefix, label=True, db=False):
             'image_shape': image_shape,
             'image_path': sep.join(img_path.split(sep)[-3:]), 
             'image_idx': int(id),
-        }
+        }                                                                                       #Extracting info and doing the same for img
 
         calib_dict = read_calib(calib_path)
-        cur_info_dict['calib'] = calib_dict
+        cur_info_dict['calib'] = calib_dict                                                     #same for calibration data
 
         lidar_points = read_points(lidar_path)
-        reduced_lidar_points = remove_outside_points(
+        reduced_lidar_points = remove_outside_points(                                           #removes points outside the img
             points=lidar_points, 
             r0_rect=calib_dict['R0_rect'], 
             tr_velo_to_cam=calib_dict['Tr_velo_to_cam'], 
@@ -74,7 +74,7 @@ def create_data_info_pkl(data_root, data_type, prefix, label=True, db=False):
         saved_reduced_path = os.path.join(data_root, split, 'velodyne_reduced')
         os.makedirs(saved_reduced_path, exist_ok=True)
         saved_reduced_points_name = os.path.join(saved_reduced_path, f'{id}.bin')
-        write_points(reduced_lidar_points, saved_reduced_points_name)
+        write_points(reduced_lidar_points, saved_reduced_points_name)                           #making file and saving reduced point clouds
 
         if label:
             label_path = os.path.join(data_root, split, 'label_2', f'{id}.txt')

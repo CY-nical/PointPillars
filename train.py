@@ -21,10 +21,12 @@ def save_summary(writer, loss_dict, global_step, tag, lr=None, momentum=None):
 
 def main(args):
     setup_seed()
+    #seed for reproducibility     
     train_dataset = Kitti(data_root=args.data_root,
                           split='train')
     val_dataset = Kitti(data_root=args.data_root,
                         split='val')
+    
     train_dataloader = get_dataloader(dataset=train_dataset, 
                                       batch_size=args.batch_size, 
                                       num_workers=args.num_workers,
@@ -34,11 +36,14 @@ def main(args):
                                     num_workers=args.num_workers,
                                     shuffle=False)
 
+    #load Kitti Dataset
+
     if not args.no_cuda:
         pointpillars = PointPillars(nclasses=args.nclasses).cuda()
     else:
         pointpillars = PointPillars(nclasses=args.nclasses)
     loss_func = Loss()
+    #initialize model
 
     max_iters = len(train_dataloader) * args.max_epoch
     init_lr = args.init_lr
@@ -55,13 +60,17 @@ def main(args):
                                                     base_momentum=0.95*0.895, 
                                                     max_momentum=0.95,
                                                     div_factor=10)
+    #Setting up optimizer and learning rate scheduler
+    #
     saved_logs_path = os.path.join(args.saved_path, 'summary')
     os.makedirs(saved_logs_path, exist_ok=True)
     writer = SummaryWriter(saved_logs_path)
     saved_ckpt_path = os.path.join(args.saved_path, 'checkpoints')
     os.makedirs(saved_ckpt_path, exist_ok=True)
 
-    for epoch in range(args.max_epoch):
+    #saves checkpoint and logs
+
+    for epoch in range(args.max_epoch):  #training loop
         print('=' * 20, epoch, '=' * 20)
         train_step, val_step = 0, 0
         for i, data_dict in enumerate(tqdm(train_dataloader)):
@@ -77,13 +86,15 @@ def main(args):
             batched_pts = data_dict['batched_pts']
             batched_gt_bboxes = data_dict['batched_gt_bboxes']
             batched_labels = data_dict['batched_labels']
+            #extracting point cloud, ground truth bb, labels
             batched_difficulty = data_dict['batched_difficulty']
             bbox_cls_pred, bbox_pred, bbox_dir_cls_pred, anchor_target_dict = \
                 pointpillars(batched_pts=batched_pts, 
                              mode='train',
                              batched_gt_bboxes=batched_gt_bboxes, 
                              batched_gt_labels=batched_labels)
-            
+            #passes data through the model
+
             bbox_cls_pred = bbox_cls_pred.permute(0, 2, 3, 1).reshape(-1, args.nclasses)
             bbox_pred = bbox_pred.permute(0, 2, 3, 1).reshape(-1, 7)
             bbox_dir_cls_pred = bbox_dir_cls_pred.permute(0, 2, 3, 1).reshape(-1, 2)
@@ -116,12 +127,14 @@ def main(args):
                                   num_cls_pos=num_cls_pos, 
                                   batched_bbox_reg=batched_bbox_reg, 
                                   batched_dir_labels=batched_dir_labels)
+            #compute total loss using a loss function
             
             loss = loss_dict['total_loss']
             loss.backward()
             # torch.nn.utils.clip_grad_norm_(pointpillars.parameters(), max_norm=35)
             optimizer.step()
             scheduler.step()
+            #back propagation and weight update
 
             global_step = epoch * len(train_dataloader) + train_step + 1
 
@@ -130,12 +143,15 @@ def main(args):
                              lr=optimizer.param_groups[0]['lr'], 
                              momentum=optimizer.param_groups[0]['betas'][0])
             train_step += 1
+            #log loss, lr and momentum for visualization
+
         if (epoch + 1) % args.ckpt_freq_epoch == 0:
             torch.save(pointpillars.state_dict(), os.path.join(saved_ckpt_path, f'epoch_{epoch+1}.pth'))
+        #save model checkpoint every few epoch
 
         if epoch % 2 == 0:
             continue
-        pointpillars.eval()
+        pointpillars.eval()  #validation loop
         with torch.no_grad():
             for i, data_dict in enumerate(tqdm(val_dataloader)):
                 if not args.no_cuda:
